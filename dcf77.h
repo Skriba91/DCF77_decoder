@@ -3,12 +3,28 @@
  *
  *  Created on: 2019. okt. 20.
  *  Author: Skriba Dániel
+ *
  */
 
 #ifndef DCF77_H_
 #define DCF77_H_
 
 #include <stdint.h>
+
+////////////////////////////////////////////////////////////////////////////////
+/*
+ * The section below contains the code to demodulate the pulse amplitude coded
+ * discrete data coming from the DCF77 receiver. The program produces a bit
+ * stream consists of zeros and ones.
+ */
+////////////////////////////////////////////////////////////////////////////////
+
+
+////////////////////////////////////////////////////////////////////////////////
+/*
+ * The section below contains the code to decode the demodulated bit stream.
+ */
+////////////////////////////////////////////////////////////////////////////////
 
 typedef enum {MinuteFrame, Infoend = 20, Minuteend = 28,
 				Hourend = 35, Dateend = 58} dcf77_position;
@@ -28,56 +44,39 @@ typedef struct {
 	DCF77_decode_todo task;
 } element;
 
-element g_DCF77Control[E+1][ER+1];
+typedef struct {
+	uint32_t buffer; 	/**< Global variable for input buffer */
+	uint8_t parity;
+} DCF77_decode_input_buffer_struct;
 
-//Initialise state model
-void init_decode();
+typedef struct {
+	unsigned int spacialflags:20;
+	unsigned int minute:6;
+	unsigned int minutevalidflag:1;
+	unsigned int hour:6;
+	unsigned int hourvalidflag:1;
+	unsigned int day:5;
+	unsigned int dayvalidflag:1;
+	unsigned int dayofweek:4;
+	unsigned int dayofweekvalidflag:1;
+	unsigned int month:5;
+	unsigned int monthvalidflag:1;
+	unsigned int year:7;
+	unsigned int yearvalidflag:1;
+	unsigned int validframe:1;
+} timedate_temp;
 
-next_pos next_bit(int8_t bit) {
-	static uint8_t cntr = 0;
-	next_pos p;
-	p.b = bit;
-	if(bit < 0) {
-		p.e = ER;
-	}
-	else {
-		switch(cntr) {
-		case MinuteFrame : p.e = MF; break;
-		case Infoend     : p.e = DF; break;
-		case Minuteend   : p.e = PB; break;
-		case Hourend     : p.e = PB; break;
-		case Dateend     : p.e = PB; break;
-		default          : p.e = DB;
-		}
-	}
+timedate_temp* g_DCF77_tmp_timedate;
 
-	//If not end of date increment counter else reset counter to zero
-	cntr != Dateend ? cntr++ : cntr = 0;
+element g_DCF77Control[E+1][ER+1];	/**< Matrix of control structure */
 
-	return p;
+//TODO: Creat a 64 bit buffer for whole frame for analysis
 
-}
-
-//TODO
-void putinbuffer(int8_t bit);
+//Initialize state model
+void init_decode(timedate_temp* timedate);
 
 //TODO
-void framecheckminute(int8_t bit);
-
-//TODO
-void framecheckdata(int8_t bit);
-
-//TODO
-void paritycheckminute(int8_t bit);
-
-//TODO
-void paritycheckhour(int8_t bit);
-
-//TODO
-void paritycheckdate(int8_t bit);
-
-//TODO
-void DCF77_decode_error(int8_t bit);
+next_pos next_bit(int8_t bit);
 
 
 #endif /* DCF77_H_ */
