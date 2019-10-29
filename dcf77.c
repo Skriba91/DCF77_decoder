@@ -220,7 +220,9 @@ void init_decode(timedate_temp* timedate) {
 	g_DCF77Control[F][MF].new_state = I; g_DCF77Control[F][MF].task = minuteframestart;
 	g_DCF77Control[F][ER].new_state = E; g_DCF77Control[F][ER].task = DCF77_decode_error;
 
-	g_DCF77Control[I][DB].new_state = I; g_DCF77Control[I][DB].task = putinbuffer();
+	g_DCF77Control[I][DB].new_state = I; g_DCF77Control[I][DB].task = putinbuffer;
+	g_DCF77Control[I][DF].new_state = M; g_DCF77Control[I][DF].task = timedateframestart;
+	g_DCF77Control[I][ER].new_state = E; g_DCF77Control[I][DR].task = DCF77_decode_error;
 	//TODO I M H D állapotok összevonhatók
 
 }
