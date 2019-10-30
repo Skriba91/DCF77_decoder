@@ -28,10 +28,10 @@
 
 typedef enum {MinuteFrame, Infoend = 20, Minuteend = 28,
 				Hourend = 35, Dateend = 58} dcf77_position;
-typedef enum {F, I, M, H, D, E} DCF77_decode_state;
+typedef enum {F, I, M, H, D} DCF77_decode_state;
 typedef enum {MF, DF, DB, PB, ER} DCF77_decode_event;
 
-typedef void DCF77_decode_activity(uint8_t b);
+typedef void DCF77_decode_activity(int8_t b);
 typedef DCF77_decode_activity* DCF77_decode_todo;
 
 typedef struct {
@@ -66,9 +66,11 @@ typedef struct {
 	unsigned int validframe:1;
 } timedate_temp;
 
+
+//Global variables
 timedate_temp* g_DCF77_tmp_timedate;
 
-element g_DCF77Control[E+1][ER+1];	/**< Matrix of control structure */
+element g_DCF77Control[D+1][ER+1];	/**< Matrix of control structure */
 
 //TODO: Creat a 64 bit buffer for whole frame for analysis
 
