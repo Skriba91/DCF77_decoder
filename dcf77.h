@@ -19,6 +19,35 @@
  */
 ////////////////////////////////////////////////////////////////////////////////
 
+typedef enum {IDLE, LOWS, HIGH, TRAN} DCF77_demod_state;
+typedef enum {HP, FS, LP, TR, EE} DCF77_demod_event;
+
+typedef void DCF77_demod_activity(uint16_t duration);
+typedef DCF77_demod_activity* DCF77_demod_todo;
+
+typedef struct {
+	DCF77_demod_state new_state;
+	DCF77_demod_todo task;
+} dcf77_demod_element;
+
+typedef struct {
+	uint8_t level;
+	uint16_t duration;
+	uint16_t period;
+} dcf77_demod_level;
+
+typedef struct {
+	DCF77_demod_event e;
+	dcf77_demod_level l;
+} dcf77_demod_next_pos;
+
+dcf77_demod_element g_demod_DCF77Control[TRAN+1][EE+1];
+
+//TODO
+void init_demod();
+
+//TODO
+dcf77_demod_next_pos dcf77_demod_next_level(dcf77_demod_level level);
 
 ////////////////////////////////////////////////////////////////////////////////
 /*
@@ -37,12 +66,12 @@ typedef DCF77_decode_activity* DCF77_decode_todo;
 typedef struct {
 	DCF77_decode_event e;
 	uint8_t b;
-} next_pos;
+} dcf77_decode_next_pos;
 
 typedef struct {
 	DCF77_decode_state new_state;
 	DCF77_decode_todo task;
-} element;
+} dcf77_decode_element;
 
 typedef struct {
 	uint32_t buffer; 	/**< Global variable for input buffer */
@@ -67,18 +96,19 @@ typedef struct {
 } timedate_temp;
 
 
-//Global variables
+//Global variables only witten by the state machine
 timedate_temp* g_DCF77_tmp_timedate;
 
-element g_DCF77Control[D+1][ER+1];	/**< Matrix of control structure */
+dcf77_decode_element g_decode_DCF77Control[D+1][ER+1];	/**< Matrix of control structure */
 
-//TODO: Creat a 64 bit buffer for whole frame for analysis
+//64 bit variable for whole frame analysis (further feature)
+uint64_t g_DCF77_decode_frame;
 
 //Initialize state model
 void init_decode(timedate_temp* timedate);
 
 //TODO
-next_pos next_bit(int8_t bit);
+dcf77_decode_next_pos dcf77_decode_next_bit(int8_t bit);
 
 
 #endif /* DCF77_H_ */
