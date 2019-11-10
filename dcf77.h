@@ -19,10 +19,15 @@
  */
 ////////////////////////////////////////////////////////////////////////////////
 
-typedef enum {IDLE, LOWS, HIGH, TRAN} DCF77_demod_state;
-typedef enum {HP, FS, LP, TR, EE} DCF77_demod_event;
+typedef enum {IDLE, RECV} DCF77_demod_state;
 
-typedef void DCF77_demod_activity(uint16_t duration);
+// MS: Minute Start
+// FS: Frame Sync
+// SP: Second pulse
+// EE: Error
+typedef enum {MS, FS, SP, EE} DCF77_demod_event;
+
+typedef void DCF77_demod_activity(int8_t duration);
 typedef DCF77_demod_activity* DCF77_demod_todo;
 
 typedef struct {
@@ -31,23 +36,22 @@ typedef struct {
 } dcf77_demod_element;
 
 typedef struct {
-	uint8_t level;
-	uint16_t duration;
-	uint16_t period;
-} dcf77_demod_level;
-
-typedef struct {
 	DCF77_demod_event e;
-	dcf77_demod_level l;
+	int8_t d;
 } dcf77_demod_next_pos;
 
-dcf77_demod_element g_demod_DCF77Control[TRAN+1][EE+1];
+typedef struct {
+	uint16_t low_duration;
+	uint16_t high_duration;
+} dcf77_second;
+
+dcf77_demod_element g_demod_DCF77Control[RECV+1][EE+1];
 
 //TODO
 void init_demod();
 
 //TODO
-dcf77_demod_next_pos dcf77_demod_next_level(dcf77_demod_level level);
+dcf77_demod_next_pos dcf77_demod_next_level(dcf77_second second);
 
 ////////////////////////////////////////////////////////////////////////////////
 /*

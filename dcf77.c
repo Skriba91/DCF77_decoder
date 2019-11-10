@@ -10,6 +10,9 @@
 #include "dcf77.h"
 #include <stdio.h>
 
+#define G_LOW_LEVEL 0
+#define G_HIGH_LEVEL 1
+
 #define G_DCF77_WEIGHTMASK 1
 #define G_DCF77_WEIGHTLENGTH 8
 #define G_DCF77_WEEKDAYMAS 0b111
@@ -23,6 +26,9 @@
 #define G_DCF77_MONTHOFFSET 4
 #define G_DCF77_YEAROFFSET 7
 
+#define G_DCF77_GENERAL_ERROR -1
+#define G_DCF77_MINUTE_START -2
+
 #define ISTRANSIENT 1
 #define WASTRANSIENT 2
 
@@ -35,115 +41,99 @@
  */
 ////////////////////////////////////////////////////////////////////////////////
 
-typedef struct {
-	uint8_t level;
-	uint16_t duration;
-	uint8_t savedflag;
-} dcf77_demod_savelevel;
 
 //Function pointer to a function to do when minutesync is detected
 typedef void DCF77_minutesync_action();
 typedef DCF77_minutesync_action* DCF77_minutesync;
-DCF77_minutesync_action G_sync_minute;
+DCF77_minutesync G_DCF77_sync_minute;
 
-static dcf77_demod_savelevel g_saved_state;
+typedef void DCF77_bitgen_action(int8_t);
+typedef DCF77_bitgen_action* DCF77_bitgeneration;
+DCF77_bitgeneration G_DCF77_bitgen;
 
-static void bitgeneration(dcf77_demod_level new_level) {
-	if((new_level.duration > 70) & (new_level.duration < 150)) {
-		dcf77_decode_next_bit(1);
-	}
-	else if((new_level.duration > 150) & (new_level.duration < 250)) {
-		dcf77_decode_next_bit(0);
-	}
-	else {
-		dcf77_decode_next_bit(-1);
-	}
+static void bitgeneration(int8_t bit) {
+	G_DCF77_bitgen(bit);
 }
 
-static void transient(dcf77_demod_level new_level) {
-	g_saved_state.level = new_level.level;
-	g_saved_state.duration = new_level.duration;
-	g_saved_state.savedflag = (ISTRANSIENT & WASTRANSIENT);
+
+//Beginning of a new minute, start demodulation
+static void minuteframe(int8_t bit) {
+	G_DCF77_bitgen(bit);
 }
 
-static void seconddetect(dcf77_demod_level new_level) {
-
+//End of a minute without demodulation errors, start of new minute
+static void minutesync(int8_t bit) {
+	G_DCF77_sync_minute();
+	G_DCF77_bitgen(bit);
 }
 
-static void endtransient(dcf77_demod_level new_level) {
-	g_saved_state.level = new_level.level;
-	g_saved_state.duration += new_level.duration;
-	g_saved_state.savedflag = WASTRANSIENT;
-}
-
-static void minuteframe(dcf77_demod_level new_level) {
-
-}
-
-static void minutesync(dcf77_demod_level new_level) {
-	G_sync_minute();
-}
-
-static void DCF77_demod_error(dcf77_demod_level new_level) {
-	dcf77_decode_next_bit(-1);
+static void DCF77_demod_error(int8_t bit) {
+	G_DCF77_bitgen(bit);
 }
 
 
 //TODO
-void init_demod(DCF77_minutesync sync_action) {
+void init_demod(DCF77_minutesync sync_action, DCF77_bitgeneration bitgen) {
 	DCF77_decode_state i;
 	DCF77_decode_event j;
 
-	G_sync_minute = sync_action;
+	G_DCF77_sync_minute = sync_action;
+	G_DCF77_bitgen = bitgen;
 
-	for(i = IDLE; i < TRAN; ++i) {
-		for(j = HP; j < EE; ++j) {
+	for(i = IDLE; i < (RECV + 1); ++i) {
+		for(j = MS; j < (EE + 1); ++j) {
 			g_demod_DCF77Control[i][j].new_state = IDLE;
 			g_demod_DCF77Control[i][j].task = DCF77_demod_error;
 		}
 	}
 
-	g_demod_DCF77Control[IDLE][HP].new_state = LOWS; g_demod_DCF77Control[IDLE][HP].task = minuteframe;
+	g_demod_DCF77Control[IDLE][EE].new_state = IDLE; g_demod_DCF77Control[IDLE][EE].task = DCF77_demod_error;
+	g_demod_DCF77Control[IDLE][MS].new_state = RECV; g_demod_DCF77Control[IDLE][MS].task = minuteframe;
 
-	g_demod_DCF77Control[LOWS][LP].new_state = HIGH; g_demod_DCF77Control[LOWS][LP].task = bitgeneration;
-	g_demod_DCF77Control[LOWS][TR].new_state = TRAN; g_demod_DCF77Control[LOWS][TR].task = transient;
-	g_demod_DCF77Control[LOWS][EE].new_state = IDLE; g_demod_DCF77Control[LOWS][EE].task = DCF77_demod_error;
+	g_demod_DCF77Control[RECV][FS].new_state = RECV; g_demod_DCF77Control[RECV][FS].task = minutesync;
+	g_demod_DCF77Control[RECV][SP].new_state = RECV; g_demod_DCF77Control[RECV][SP].task = bitgeneration;
+	g_demod_DCF77Control[RECV][EE].new_state = IDLE; g_demod_DCF77Control[RECV][EE].task = DCF77_demod_error;
 
-	g_demod_DCF77Control[HIGH][HP].new_state = LOWS; g_demod_DCF77Control[HIGH][HP].task = seconddetect;
-	g_demod_DCF77Control[HIGH][FS].new_state = LOWS; g_demod_DCF77Control[HIGH][FS].task = minutesync;
-	g_demod_DCF77Control[HIGH][TR].new_state = TRAN; g_demod_DCF77Control[HIGH][TR].task = transient;
-	g_demod_DCF77Control[HIGH][EE].new_state = IDLE; g_demod_DCF77Control[HIGH][EE].task = DCF77_demod_error;
 
-	g_demod_DCF77Control[TRAN][HP].new_state = LOWS; g_demod_DCF77Control[TRAN][HP].task = endtransient;
-	g_demod_DCF77Control[TRAN][LP].new_state = HIGH; g_demod_DCF77Control[TRAN][LP].task = endtransient;
-	g_demod_DCF77Control[TRAN][EE].new_state = IDLE; g_demod_DCF77Control[TRAN][EE].task = DCF77_demod_error;
 	
 }
 
 //TODO
-dcf77_demod_next_pos dcf77_demod_next_level(dcf77_demod_level level) {
-
-	static uint16_t period = 0;
+dcf77_demod_next_pos dcf77_demod_next_level(dcf77_second second) {
+	//TODO error detection for invalid duration times
+	uint16_t period = second.low_duration + second.high_duration;
 
 	dcf77_demod_next_pos p;
-
-	//When no transient  and the pulse was high
-	if((level.level == 1) && !g_saved_state.savedflag) {
-		if((level.duration > 1700) && (level.duration < 2000)) {
-			//Minute frame sync
-			if((period > 1990) && (period < 2010)) {
-				p.e = FS;
-				period = 0;
-			}
-			//No sync but minute frame
-			else if(period == 0) {
-				p.e = HP;
-			}
-			else {
-				p.e = EE;
-			}
+	//Second received
+	if((period > 995) && (period < 1005)) {
+		if((second.low_duration > 70) && (second.low_duration < 130)) {
+			p.e = SP;
+			p.d = 1;
+		}
+		else if((second.low_duration > 160) && (second.low_duration < 240)) {
+			p.e = SP;
+			p.d = 0;
+		}
+		else {
+			p.e = EE;
+			p.d = G_DCF77_GENERAL_ERROR;
 		}
 	}
+	//Minute frame received
+	else if((period > 1990) && (period < 2005)) {
+		p.e = FS;
+		p.d = G_DCF77_MINUTE_START;
+	}
+	//Minute start possibility detected
+	else if((second.high_duration > 1700) && (second.high_duration < 2000)) {
+		p.e = MS;
+		p.d = G_DCF77_MINUTE_START;
+	}
+	else {
+		p.e = EE;
+		p.d = G_DCF77_GENERAL_ERROR;
+	}
+
 	return p;
 }
 
@@ -319,6 +309,7 @@ dcf77_decode_next_pos dcf77_decode_next_bit(int8_t bit) {
 		p.e = ER;	//Creating an error event
 		cntr = 0;	//Starting over from error
 	}
+	//TODO Should make batter event system with frame signals
 	else {
 		g_DCF77_decode_frame <<= 1;		//For full frame analysis
 		g_DCF77_decode_frame |= bit;
@@ -333,6 +324,7 @@ dcf77_decode_next_pos dcf77_decode_next_bit(int8_t bit) {
 	}
 
 	//If not end of date increment counter else reset counter to zero
+	//TODO should not increment if error
 	(cntr != Dateend) ? cntr++ : (cntr = 0);
 
 	return p;
@@ -355,8 +347,8 @@ void init_decode(timedate_temp* timedate) {
 	g_DCF77_tmp_timedate = timedate;
 	resetTmpTimedateFlags();	//Resetting all flags to 0
 
-	for(i = F; i < D; ++i) {
-		for(j = MF; j < ER; ++j) {
+	for(i = F; i < (D + 1); ++i) {
+		for(j = MF; j < (ER + 1); ++j) {
 			g_decode_DCF77Control[i][j].new_state = F;
 			g_decode_DCF77Control[i][j].task = DCF77_decode_error;
 		}
