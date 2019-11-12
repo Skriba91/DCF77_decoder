@@ -62,7 +62,7 @@ dcf77_demod_next_pos dcf77_demod_next_level(dcf77_second second);
 typedef enum {MinuteFrame, Infoend = 20, Minuteend = 28,
 				Hourend = 35, Dateend = 58} dcf77_position;
 typedef enum {F, I, M, H, D} DCF77_decode_state;
-typedef enum {MF, DF, DB, PB, ER} DCF77_decode_event;
+typedef enum {FD, MF, DF, DB, PB, ER} DCF77_decode_event;
 
 typedef void DCF77_decode_activity(int8_t b);
 typedef DCF77_decode_activity* DCF77_decode_todo;

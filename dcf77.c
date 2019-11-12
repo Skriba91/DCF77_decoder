@@ -89,6 +89,7 @@ void init_demod(DCF77_minutesync sync_action, DCF77_bitgeneration bitgen) {
 
 	g_demod_DCF77Control[IDLE][EE].new_state = IDLE; g_demod_DCF77Control[IDLE][EE].task = DCF77_demod_error;
 	g_demod_DCF77Control[IDLE][MS].new_state = RECV; g_demod_DCF77Control[IDLE][MS].task = minuteframe;
+	g_demod_DCF77Control[IDLE][FS].new_state = RECV; g_demod_DCF77Control[IDLE][FS].task = minutesync;
 
 	g_demod_DCF77Control[RECV][FS].new_state = RECV; g_demod_DCF77Control[RECV][FS].task = minutesync;
 	g_demod_DCF77Control[RECV][SP].new_state = RECV; g_demod_DCF77Control[RECV][SP].task = bitgeneration;
@@ -198,6 +199,10 @@ static void putinbuffer(int8_t bit) {
 	g_DCF77_decode_buffer.parity ^= bit;
 }
 
+static void framedetected(int8_t bit) {
+	g_DCF77_decode_frame = 0;
+}
+
 static void minuteframestart(int8_t bit) {
 	emptyBuffer();
 	resetTmpTimedateFlags();	//Resetting all flags to 0
@@ -305,12 +310,17 @@ dcf77_decode_next_pos dcf77_decode_next_bit(int8_t bit) {
 	static uint8_t cntr = 0;
 	dcf77_decode_next_pos p;
 	p.b = bit;
-	if(bit < 0) {
+	if(bit == -1) {
 		p.e = ER;	//Creating an error event
 		cntr = 0;	//Starting over from error
 	}
+	//Starting of a new frame
+	else if (bit == -2) {
+		cntr = 0;	//Starting a new frame
+		p.e = FD;
+	}
 	//TODO Should make batter event system with frame signals
-	else {
+	else if (bit >= 0) {
 		g_DCF77_decode_frame <<= 1;		//For full frame analysis
 		g_DCF77_decode_frame |= bit;
 		switch(cntr) {
@@ -321,11 +331,14 @@ dcf77_decode_next_pos dcf77_decode_next_bit(int8_t bit) {
 		case Dateend     : p.e = PB; break;
 		default          : p.e = DB;
 		}
+		//If not end of date increment counter else reset counter to zero
+		//TODO should not increment if error
+		(cntr != Dateend) ? cntr++ : (cntr = 0);
 	}
-
-	//If not end of date increment counter else reset counter to zero
-	//TODO should not increment if error
-	(cntr != Dateend) ? cntr++ : (cntr = 0);
+	else {
+		p.e = ER;	//Creating an error event
+	    cntr = 0;	//Starting over from error
+	}
 
 	return p;
 
@@ -348,12 +361,13 @@ void init_decode(timedate_temp* timedate) {
 	resetTmpTimedateFlags();	//Resetting all flags to 0
 
 	for(i = F; i < (D + 1); ++i) {
-		for(j = MF; j < (ER + 1); ++j) {
+		for(j = FD; j < (ER + 1); ++j) {
 			g_decode_DCF77Control[i][j].new_state = F;
 			g_decode_DCF77Control[i][j].task = DCF77_decode_error;
 		}
 	}
 
+	g_decode_DCF77Control[F][FD].new_state = F; g_decode_DCF77Control[F][FD].task = framedetected;
 	g_decode_DCF77Control[F][MF].new_state = I; g_decode_DCF77Control[F][MF].task = minuteframestart;
 	g_decode_DCF77Control[F][ER].new_state = F; g_decode_DCF77Control[F][ER].task = DCF77_decode_error;
 
