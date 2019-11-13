@@ -10,27 +10,27 @@
 #include "dcf77.h"
 #include <stdio.h>
 
-#define G_LOW_LEVEL 0
-#define G_HIGH_LEVEL 1
+#define G_LOW_LEVEL 0				/**<  */
+#define G_HIGH_LEVEL 1				/**<  */
 
-#define G_DCF77_WEIGHTMASK 1
-#define G_DCF77_WEIGHTLENGTH 8
-#define G_DCF77_WEEKDAYMAS 0b111
-#define G_DCF77_MONTHMASK 0b11111
-#define G_DCF77_YEARMASK 0b11111111
+#define G_DCF77_WEIGHTMASK 1		/**<  */
+#define G_DCF77_WEIGHTLENGTH 8		/**<  */
+#define G_DCF77_WEEKDAYMAS 0b111	/**<  */
+#define G_DCF77_MONTHMASK 0b11111	/**<  */
+#define G_DCF77_YEARMASK 0b11111111	/**<  */
 
-#define G_DCF77_MINUTEOFFSET 6
-#define G_DCF77_HOUROFFSET 5
-#define G_DCF77_DAYOFFSET 5
-#define G_DCF77_DAYOFWEEKOFFSET 2
-#define G_DCF77_MONTHOFFSET 4
-#define G_DCF77_YEAROFFSET 7
+#define G_DCF77_MINUTEOFFSET 6		/**<  */
+#define G_DCF77_HOUROFFSET 5		/**<  */
+#define G_DCF77_DAYOFFSET 5			/**<  */
+#define G_DCF77_DAYOFWEEKOFFSET 2	/**<  */
+#define G_DCF77_MONTHOFFSET 4		/**<  */
+#define G_DCF77_YEAROFFSET 7		/**<  */
 
-#define G_DCF77_GENERAL_ERROR -1
-#define G_DCF77_MINUTE_START -2
+#define G_DCF77_GENERAL_ERROR -1	/**<  */
+#define G_DCF77_MINUTE_START -2		/**<  */
 
-#define ISTRANSIENT 1
-#define WASTRANSIENT 2
+#define ISTRANSIENT 1				/**<  */
+#define WASTRANSIENT 2				/**<  */
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -51,22 +51,29 @@ typedef void DCF77_bitgen_action(int8_t);
 typedef DCF77_bitgen_action* DCF77_bitgeneration;
 DCF77_bitgeneration G_DCF77_bitgen;
 
+/**
+ * This function calls the bit generation function if a bit is successfully received
+ * @param bit The received bit
+ */
 static void bitgeneration(int8_t bit) {
 	G_DCF77_bitgen(bit);
 }
 
-
-//Beginning of a new minute, start demodulation
-static void minuteframe(int8_t bit) {
-	G_DCF77_bitgen(bit);
-}
-
-//End of a minute without demodulation errors, start of new minute
+/**
+ * Synchronisation condition is detected.
+ * The previously received minute is the next minute in reality and the
+ * synchronisation frame is the mark of the start of this minute
+ * @param bit Signal the minute mark and the start of a new minute.
+ */
 static void minutesync(int8_t bit) {
 	G_DCF77_sync_minute();
 	G_DCF77_bitgen(bit);
 }
 
+/**
+ * Actions to do when receiving an incorrect second
+ * @param Signal the decoder the invalid demodulation
+ */
 static void DCF77_demod_error(int8_t bit) {
 	G_DCF77_bitgen(bit);
 }
@@ -76,9 +83,10 @@ void init_demod(DCF77_minutesync sync_action, DCF77_bitgeneration bitgen) {
 	DCF77_decode_state i;
 	DCF77_decode_event j;
 
-	G_DCF77_sync_minute = sync_action;
-	G_DCF77_bitgen = bitgen;
+	G_DCF77_sync_minute = sync_action;	//Set the action when minute mark is detected
+	G_DCF77_bitgen = bitgen;			//Set the function that processes the demodulated bits
 
+	//Initialising the state structure with the default states and actions
 	for(i = IDLE; i < (RECV + 1); ++i) {
 		for(j = MS; j < (EE + 1); ++j) {
 			g_demod_DCF77Control[i][j].new_state = IDLE;
@@ -87,7 +95,7 @@ void init_demod(DCF77_minutesync sync_action, DCF77_bitgeneration bitgen) {
 	}
 
 	g_demod_DCF77Control[IDLE][EE].new_state = IDLE; g_demod_DCF77Control[IDLE][EE].task = DCF77_demod_error;
-	g_demod_DCF77Control[IDLE][MS].new_state = RECV; g_demod_DCF77Control[IDLE][MS].task = minuteframe;
+	g_demod_DCF77Control[IDLE][MS].new_state = RECV; g_demod_DCF77Control[IDLE][MS].task = bitgeneration;
 	g_demod_DCF77Control[IDLE][FS].new_state = RECV; g_demod_DCF77Control[IDLE][FS].task = minutesync;
 
 	g_demod_DCF77Control[RECV][FS].new_state = RECV; g_demod_DCF77Control[RECV][FS].task = minutesync;
@@ -98,39 +106,46 @@ void init_demod(DCF77_minutesync sync_action, DCF77_bitgeneration bitgen) {
 	
 }
 
-//TODO
 dcf77_demod_next_pos dcf77_demod_next_level(dcf77_second second) {
-	//TODO error detection for invalid duration times
+
+	//Calculate the time between two falling edge. It should be 1 or two seconds.
 	uint16_t period = second.low_duration + second.high_duration;
 
-	dcf77_demod_next_pos p;
+	dcf77_demod_next_pos p;	//Return struct
+
 	//Second received
 	if((period > 995) && (period < 1005)) {
+		//Short low pulse
 		if((second.low_duration > 70) && (second.low_duration < 130)) {
-			p.e = SP;
-			p.d = 1;
+			p.e = SP;	//Second pulse event
+			p.d = 1;	//The received bit is one
 		}
+		//Long low pulse
 		else if((second.low_duration > 160) && (second.low_duration < 240)) {
-			p.e = SP;
-			p.d = 0;
+			p.e = SP;	//Second pulse event
+			p.d = 0;	//The reveived bit is zero
 		}
+		//Any other case is invalid
 		else {
-			p.e = EE;
-			p.d = G_DCF77_GENERAL_ERROR;
+			p.e = EE;	//Error event
+			p.d = G_DCF77_GENERAL_ERROR;	//Receiving error
 		}
 	}
 	//Minute frame received
 	else if((period > 1990) && (period < 2005)) {
-		p.e = FS;
-		p.d = G_DCF77_MINUTE_START;
+		p.e = FS;						//Frame sync event
+		p.d = G_DCF77_MINUTE_START;		//Signal the minute mark event to the decoder
 	}
-	//Minute start possibility detected
+	//Minute start possibility detected. It is a start of a minute with proper
+	//period detection. If the further bits are correct the demodulation can be
+	//started.
 	else if((second.high_duration > 1700) && (second.high_duration < 2000)) {
-		p.e = MS;
-		p.d = G_DCF77_MINUTE_START;
+		p.e = MS;		//Minute start event
+		p.d = G_DCF77_MINUTE_START;	//Signaling the start of the minute to the decoder
 	}
+	//Every other case means receiving error
 	else {
-		p.e = EE;
+		p.e = EE;		//Error event
 		p.d = G_DCF77_GENERAL_ERROR;
 	}
 
@@ -145,21 +160,39 @@ dcf77_demod_next_pos dcf77_demod_next_level(dcf77_second second) {
 
 static DCF77_decode_input_buffer_struct g_DCF77_decode_buffer; 	/**< Global variable for input buffer */
 
+/**
+ * Calculates the decimal value of the received data
+ * The data can be:
+ *  - year
+ *  - month
+ *  - day
+ *  - day of the week
+ *  - hour
+ *  - minute
+ * @param tmp_buffer The input buffer
+ * @param The number of bits used to code the given datetime value
+ * @return The decimal value of the received data
+ */
 static uint8_t calculateDecimalValue(uint32_t tmp_buffer, int8_t offset) {
 
-	uint8_t decimalvalue = 0;
+	uint8_t decimalvalue = 0;	//Return value
+
+	//The individual weights of the bits
 	const uint8_t weight[8] = {1, 2, 4, 8, 10, 20, 40, 80};
 
-	for(uint8_t i = 0; offset >= 0; ++i) {
-		decimalvalue += ((tmp_buffer >> offset) &
-						G_DCF77_WEIGHTMASK) * weight[i];
-		--offset;
+	//Summing the weights of the received bits from offset position and shifting
+	//the bits in the LSB position.
+	for(uint8_t i = 0; offset >= 0; ++i, --offset) {
+		decimalvalue += ((tmp_buffer >> offset) & G_DCF77_WEIGHTMASK) * weight[i];
 	}
 	//TODO: To increase efficiency unroll loop or use vector instructions
 
 	return decimalvalue; //Returning the decimal value
 }
 
+/**
+ * Resetting all receiving flags to zero
+ */
 static void resetTmpTimedateFlags() {
 	g_DCF77_tmp_timedate->minutevalidflag = 0;
 	g_DCF77_tmp_timedate->hourvalidflag = 0;
@@ -170,48 +203,72 @@ static void resetTmpTimedateFlags() {
 	g_DCF77_tmp_timedate->validframe = 0;
 }
 
+/**
+ * If every field is valid this funcrtion sets the frame valid flag.
+ * The synchronisation only can be done if everithing was received correctly.
+ */
 static void setIfAllValid() {
 	//If all timedate flag are valid then set the global valid flag
-	if(g_DCF77_tmp_timedate->minutevalidflag &
-			g_DCF77_tmp_timedate->hourvalidflag &
-			g_DCF77_tmp_timedate->dayvalidflag &
-			g_DCF77_tmp_timedate->dayofweekvalidflag &
-			g_DCF77_tmp_timedate->monthvalidflag &
-			g_DCF77_tmp_timedate->yearvalidflag)
+	if(	g_DCF77_tmp_timedate->minutevalidflag &
+		g_DCF77_tmp_timedate->hourvalidflag &
+		g_DCF77_tmp_timedate->dayvalidflag &
+		g_DCF77_tmp_timedate->dayofweekvalidflag &
+		g_DCF77_tmp_timedate->monthvalidflag &
+		g_DCF77_tmp_timedate->yearvalidflag)
 	{
 		g_DCF77_tmp_timedate->validframe = 1;
 	}
+	//In every other case the frame is invalid
 	else {
 		g_DCF77_tmp_timedate->validframe = 0;
 	}
 }
 
+/**
+ * Resets the input buffer and the parity bit.
+ */
 static void emptyBuffer() {
-	//TODO
 	g_DCF77_decode_buffer.buffer = 0;
 	g_DCF77_decode_buffer.parity = 0;
 }
 
+/**
+ * Puts the received bit in the input buffer and calculates the current parity.
+ * With real time parity calculation the final parity check is only one comparation.
+ * @param The received bit
+ */
 static void putinbuffer(int8_t bit) {
 	g_DCF77_decode_buffer.buffer <<= 1;			//Shifting bufer left by one
 	g_DCF77_decode_buffer.buffer |= (uint32_t)bit;	//Puting new bit in the LSB position
-	g_DCF77_decode_buffer.parity ^= bit;
+	g_DCF77_decode_buffer.parity ^= bit;		//Calculate the current state of the parity
 }
 
+/**
+ *
+ */
 static void framedetected(int8_t bit) {
 	g_DCF77_decode_frame = 0;
 }
 
+/**
+ *
+ */
 static void minuteframestart(int8_t bit) {
-	emptyBuffer();
+	emptyBuffer();				//Reset the input buffer
 	resetTmpTimedateFlags();	//Resetting all flags to 0
 }
 
+/**
+ *
+ */
 static void timedateframestart(int8_t bit) {
 	g_DCF77_tmp_timedate->spacialflags = g_DCF77_decode_buffer.buffer;
 	emptyBuffer();
 }
 
+/**
+ *
+ */
 static void paritycheckminuteandset(int8_t bit) {
 
 	if(g_DCF77_decode_buffer.parity == bit) {
@@ -232,6 +289,9 @@ static void paritycheckminuteandset(int8_t bit) {
 	emptyBuffer();
 }
 
+/**
+ *
+ */
 static void paritycheckhourandset(int8_t bit) {
 
 	if(g_DCF77_decode_buffer.parity == bit) {
@@ -250,6 +310,9 @@ static void paritycheckhourandset(int8_t bit) {
 	emptyBuffer();
 }
 
+/**
+ *
+ */
 static void paritycheckdateandfinish(int8_t bit) {
 
 	if(g_DCF77_decode_buffer.parity == bit) {
@@ -299,6 +362,9 @@ static void paritycheckdateandfinish(int8_t bit) {
 	emptyBuffer();
 }
 
+/**
+ *
+ */
 static void DCF77_decode_error(int8_t bit) {
 	resetTmpTimedateFlags();
 	emptyBuffer();
