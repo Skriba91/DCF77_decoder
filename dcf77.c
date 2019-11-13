@@ -72,7 +72,6 @@ static void DCF77_demod_error(int8_t bit) {
 }
 
 
-//TODO
 void init_demod(DCF77_minutesync sync_action, DCF77_bitgeneration bitgen) {
 	DCF77_decode_state i;
 	DCF77_decode_event j;
