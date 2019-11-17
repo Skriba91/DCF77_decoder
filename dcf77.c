@@ -118,12 +118,12 @@ dcf77_demod_next_pos dcf77_demod_next_level(dcf77_second second) {
 		//Short low pulse
 		if((second.low_duration > 70) && (second.low_duration < 130)) {
 			p.e = SP;	//Second pulse event
-			p.d = 1;	//The received bit is one
+			p.d = 0;	//The received bit is zero
 		}
 		//Long low pulse
 		else if((second.low_duration > 160) && (second.low_duration < 240)) {
 			p.e = SP;	//Second pulse event
-			p.d = 0;	//The reveived bit is zero
+			p.d = 1;	//The reveived bit is one
 		}
 		//Any other case is invalid
 		else {
