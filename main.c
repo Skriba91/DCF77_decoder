@@ -138,8 +138,8 @@ dcf77_second simpletoSeconds(uint8_t bit) {
 	dcf77_second second;
 	//Code one
 	if(bit == 1) {
-		second.low_duration = 100;
-		second.high_duration = 900;
+		second.low_duration = 200;
+		second.high_duration = 800;
 	}
 	//Code minute sync
 	else if(bit == 2) {
@@ -148,8 +148,8 @@ dcf77_second simpletoSeconds(uint8_t bit) {
 	}
 	//Code zero
 	else {
-		second.low_duration = 200;
-		second.high_duration = 800;
+		second.low_duration = 100;
+		second.high_duration = 900;
 	}
 	return second;
 }
